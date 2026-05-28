@@ -74,7 +74,7 @@
   padding: 12px 14px 6px;
   outline: none;
   cursor: text;
-  position: relative;
+  position: relative;  /* required for ghost textarea absolute positioning */
 }
 
 /* Highlight border when focused (keyboard active) */
@@ -138,4 +138,30 @@
   padding: 0 4px;
   font-size: 9px;
   font-family: var(--font-code);
+}
+
+/*
+  Ghost textarea — real <textarea> so mobile browsers open the keyboard on focus,
+  but visually invisible. Must stay within the viewport (not left:-9999px) for
+  iOS/Android to actually trigger the soft keyboard.
+  font-size:16px prevents iOS Safari from auto-zooming on focus.
+*/
+.terminal-ghost-input {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  opacity: 0;
+  pointer-events: none; /* clicks pass through to the parent div */
+  font-size: 16px;
+  border: none;
+  outline: none;
+  padding: 0;
+  margin: 0;
+  resize: none;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  overflow: hidden;
 }

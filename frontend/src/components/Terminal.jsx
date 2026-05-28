@@ -2,19 +2,21 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import './Terminal.css'
 
 export default function Terminal({ code, runTrigger, problemId, onRunningChange }) {
-  const [isRunning,  setIsRunning]  = useState(false)
-  const [stats, setStats]           = useState({ compileMs: null, execMs: null })
+  const [isRunning, setIsRunning] = useState(false)
+  const [stats, setStats]         = useState({ compileMs: null, execMs: null })
 
-  // All terminal text lives in a ref so stream callbacks never go stale.
-  // A separate display-state is set from the ref to trigger React renders.
-  const contentRef  = useRef('')
-  const inputRef    = useRef('')
-  const wsRef       = useRef(null)
-  const termRef     = useRef(null)
-  const isRunRef    = useRef(false)
+  // All fast-changing data lives in refs so stream callbacks never go stale.
+  const contentRef = useRef('')
+  const inputRef   = useRef('')
+  const wsRef      = useRef(null)
+  const isRunRef   = useRef(false)
 
-  const [displayContent,  setDisplayContent]  = useState('')
-  const [displayInput,    setDisplayInput]    = useState('')
+  // Two display states trigger React renders for content and current input line
+  const [displayContent, setDisplayContent] = useState('')
+  const [displayInput,   setDisplayInput]   = useState('')
+
+  const termRef   = useRef(null)   // scrollable output div
+  const ghostRef  = useRef(null)   // hidden <textarea> — the real input for mobile keyboard
 
   const flushContent = () => setDisplayContent(contentRef.current)
   const flushInput   = () => setDisplayInput(inputRef.current)
@@ -24,14 +26,14 @@ export default function Terminal({ code, runTrigger, problemId, onRunningChange 
     flushContent()
   }, [])
 
-  // Auto-scroll on new output
+  // Auto-scroll to bottom on new output
   useEffect(() => {
     if (termRef.current) termRef.current.scrollTop = termRef.current.scrollHeight
   }, [displayContent, displayInput])
 
   useEffect(() => { onRunningChange?.(isRunning) }, [isRunning])
 
-  // Clear terminal when user switches problem
+  // Clear terminal when problem is switched
   useEffect(() => {
     closeWs()
     contentRef.current = ''
@@ -43,25 +45,31 @@ export default function Terminal({ code, runTrigger, problemId, onRunningChange 
     setStats({ compileMs: null, execMs: null })
   }, [problemId])
 
-  // Trigger run
+  // Trigger a new run
   useEffect(() => {
     if (runTrigger > 0) startSession()
   }, [runTrigger])
 
   function closeWs() {
     if (wsRef.current) {
-      wsRef.current.onclose = null
-      wsRef.current.onerror = null
+      wsRef.current.onclose   = null
+      wsRef.current.onerror   = null
       wsRef.current.onmessage = null
       wsRef.current.close()
       wsRef.current = null
     }
   }
 
+  function focusGhost() {
+    // Focuses the hidden textarea → shows keyboard on mobile
+    ghostRef.current?.focus()
+  }
+
   function startSession() {
     closeWs()
     contentRef.current = ''
     inputRef.current   = ''
+    if (ghostRef.current) ghostRef.current.value = ''
     flushContent()
     flushInput()
     isRunRef.current = true
@@ -92,15 +100,14 @@ export default function Terminal({ code, runTrigger, problemId, onRunningChange 
           break
         case 'exit':
           setStats(s => ({ ...s, execMs: msg.execMs }))
-          if (msg.killed) {
-            appendContent('\n[Killed]\n')
-          } else if (msg.timeout) {
-            appendContent('\n[⏱ Timed out — check for infinite loops or missing input]\n')
-          } else {
-            appendContent('\n[Exited with code ' + msg.code + ']\n')
-          }
+          appendContent(
+            msg.killed   ? '\n[Killed]\n'
+            : msg.timeout ? '\n[⏱ Timed out — infinite loop or missing input?]\n'
+            :               '\n[Exited with code ' + msg.code + ']\n'
+          )
           isRunRef.current = false
           inputRef.current = ''
+          if (ghostRef.current) ghostRef.current.value = ''
           flushInput()
           setIsRunning(false)
           break
@@ -112,58 +119,76 @@ export default function Terminal({ code, runTrigger, problemId, onRunningChange 
       }
     }
 
-    ws.onclose = () => {
-      isRunRef.current = false
-      setIsRunning(false)
-    }
+    ws.onclose = () => { isRunRef.current = false; setIsRunning(false) }
     ws.onerror = () => {
       appendContent('\n[Connection error — is the server running?]\n')
       isRunRef.current = false
       setIsRunning(false)
     }
+
+    // Focus ghost input automatically so keyboard is ready
+    setTimeout(() => ghostRef.current?.focus(), 100)
   }
 
-  // Keyboard handler — uses refs so it never needs to be recreated
-  const handleKeyDown = useCallback((e) => {
+  // ── Ghost textarea handlers ────────────────────────────────────────────────
+
+  const sendLine = useCallback(() => {
+    const line = inputRef.current
+    contentRef.current += line + '\n'
+    flushContent()
+    inputRef.current = ''
+    if (ghostRef.current) ghostRef.current.value = ''
+    flushInput()
+    wsRef.current?.send(JSON.stringify({ type: 'input', data: line + '\n' }))
+  }, [])
+
+  const killProcess = useCallback(() => {
+    contentRef.current += '^C\n'
+    flushContent()
+    inputRef.current = ''
+    if (ghostRef.current) ghostRef.current.value = ''
+    flushInput()
+    wsRef.current?.send(JSON.stringify({ type: 'kill' }))
+    isRunRef.current = false
+    setIsRunning(false)
+    closeWs()
+  }, [])
+
+  // onInput fires for every character change — works on mobile AND desktop
+  const handleGhostInput = useCallback((e) => {
     if (!isRunRef.current) return
+    const val = e.target.value
 
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      const line = inputRef.current
-      // Echo typed input into the terminal history (with newline)
-      contentRef.current += line + '\n'
+    // Some mobile keyboards insert "\n" when Enter is tapped
+    if (val.includes('\n')) {
+      const lines  = val.split('\n')
+      const toSend = lines[0]
+      contentRef.current += toSend + '\n'
       flushContent()
-      inputRef.current = ''
+      inputRef.current = lines[lines.length - 1]  // text after the newline
+      e.target.value   = inputRef.current
       flushInput()
-      wsRef.current?.send(JSON.stringify({ type: 'input', data: line + '\n' }))
-
-    } else if (e.key === 'Backspace') {
-      e.preventDefault()
-      if (inputRef.current.length > 0) {
-        inputRef.current = inputRef.current.slice(0, -1)
-        flushInput()
-      }
-
-    } else if (e.ctrlKey && e.key === 'c') {
-      e.preventDefault()
-      contentRef.current += '^C\n'
-      flushContent()
-      inputRef.current = ''
-      flushInput()
-      wsRef.current?.send(JSON.stringify({ type: 'kill' }))
-      isRunRef.current = false
-      setIsRunning(false)
-      closeWs()
-
-    } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
-      e.preventDefault()
-      inputRef.current += e.key
+      wsRef.current?.send(JSON.stringify({ type: 'input', data: toSend + '\n' }))
+    } else {
+      inputRef.current = val
       flushInput()
     }
-  }, [])   // stable — reads only from refs
+  }, [])
+
+  // onKeyDown for desktop Enter / Ctrl+C; mobile may skip this for some keys
+  const handleGhostKeyDown = useCallback((e) => {
+    if (!isRunRef.current) return
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      sendLine()
+    } else if (e.ctrlKey && e.key === 'c') {
+      e.preventDefault()
+      killProcess()
+    }
+  }, [sendLine, killProcess])
 
   return (
-    <div className="terminal-wrap" onClick={() => termRef.current?.focus()}>
+    <div className="terminal-wrap">
 
       {/* ── Header ── */}
       <div className="terminal-header">
@@ -173,9 +198,9 @@ export default function Terminal({ code, runTrigger, problemId, onRunningChange 
           {isRunning && <span className="terminal-live-dot" title="Process running" />}
         </span>
         <div className="terminal-stats">
-          {stats.compileMs != null && <span className="stat compile">⚙ {stats.compileMs}ms compile</span>}
-          {stats.execMs    != null && <span className="stat exec">⚡ {stats.execMs}ms exec</span>}
-          {displayContent  && (
+          {stats.compileMs != null && <span className="stat compile">⚙ {stats.compileMs}ms</span>}
+          {stats.execMs    != null && <span className="stat exec">⚡ {stats.execMs}ms</span>}
+          {displayContent && (
             <button
               className="btn-copy"
               title="Copy output"
@@ -189,19 +214,16 @@ export default function Terminal({ code, runTrigger, problemId, onRunningChange 
       <div
         className="terminal-output"
         ref={termRef}
-        tabIndex={0}
-        onKeyDown={handleKeyDown}
-        title={isRunning ? 'Type your input here, press Enter to send' : ''}
+        onClick={focusGhost}
       >
         {!displayContent && !isRunning && (
           <div className="terminal-placeholder">
             <span className="terminal-prompt">$</span>
             <span className="terminal-blink">_</span>
-            <span className="ph-text"> Click ▶ Run or press Ctrl+Enter to execute</span>
+            <span className="ph-text"> Click ▶ Run or press Ctrl+Enter</span>
           </div>
         )}
 
-        {/* All output as a single pre block, then the live typed input inline */}
         <pre className="terminal-text">
           {displayContent}
           {isRunning && <span className="terminal-live-input">{displayInput}</span>}
@@ -210,9 +232,28 @@ export default function Terminal({ code, runTrigger, problemId, onRunningChange 
 
         {isRunning && (
           <div className="terminal-input-hint">
-            type &amp; press <kbd>Enter</kbd> to send · <kbd>Ctrl+C</kbd> to kill
+            tap here to type · <kbd>Enter</kbd> to send · <kbd>Ctrl+C</kbd> to kill
           </div>
         )}
+
+        {/*
+          Ghost textarea — invisible but is a REAL input element.
+          Mobile browsers open the keyboard when a real element is focused.
+          fontSize 16px prevents iOS Safari from auto-zooming on focus.
+        */}
+        <textarea
+          ref={ghostRef}
+          className="terminal-ghost-input"
+          onInput={handleGhostInput}
+          onKeyDown={handleGhostKeyDown}
+          autoCapitalize="none"
+          autoCorrect="off"
+          autoComplete="off"
+          spellCheck={false}
+          rows={1}
+          aria-hidden="true"
+          tabIndex={isRunning ? 0 : -1}
+        />
       </div>
 
     </div>
