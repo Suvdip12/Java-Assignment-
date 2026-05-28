@@ -493,29 +493,58 @@ public class ProblemData {
 
             new Problem(12, "Part 4", "Q2",
                 "User-Defined Exception",
-                "Create a user defined Exception and implement try-catch block to handle it. Throws InvalidAgeException when age is below 18.",
+                "Create a user defined Exception and implement try-catch block to handle it. Throws InsufficientFundsException when withdrawal amount exceeds account balance.",
                 """
-                class InvalidAgeException extends Exception {
-                    InvalidAgeException(String message) {
-                        super(message);
+                class InsufficientFundsException extends Exception {
+                    double shortage;
+
+                    InsufficientFundsException(double shortage) {
+                        super("Insufficient funds! Short by Rs. " + shortage);
+                        this.shortage = shortage;
                     }
                 }
 
-                public class CustomExceptionDemo {
-                    static void validateAge(int age) throws InvalidAgeException {
-                        if (age < 18) {
-                            throw new InvalidAgeException("Age must be 18 or above");
-                        }
-                        System.out.println("Valid age: " + age);
+                class BankAccount {
+                    private String owner;
+                    private double balance;
+
+                    BankAccount(String owner, double balance) {
+                        this.owner = owner;
+                        this.balance = balance;
                     }
 
-                    public static void main(String[] args) {
-                        try {
-                            validateAge(25);
-                            validateAge(15);
-                        } catch (InvalidAgeException e) {
-                            System.out.println("Caught Exception: " + e.getMessage());
+                    void deposit(double amount) {
+                        balance += amount;
+                        System.out.println("Deposited Rs. " + amount + " | Balance: Rs. " + balance);
+                    }
+
+                    void withdraw(double amount) throws InsufficientFundsException {
+                        if (amount > balance) {
+                            throw new InsufficientFundsException(amount - balance);
                         }
+                        balance -= amount;
+                        System.out.println("Withdrawn Rs. " + amount + " | Balance: Rs. " + balance);
+                    }
+
+                    void showBalance() {
+                        System.out.println(owner + "'s Balance: Rs. " + balance);
+                    }
+                }
+
+                public class BankDemo {
+                    public static void main(String[] args) {
+                        BankAccount acc = new BankAccount("Suvadip", 1000.0);
+                        acc.showBalance();
+
+                        try {
+                            acc.deposit(500.0);
+                            acc.withdraw(300.0);
+                            acc.withdraw(2000.0);
+                        } catch (InsufficientFundsException e) {
+                            System.out.println("Exception Caught: " + e.getMessage());
+                        }
+
+                        acc.showBalance();
                     }
                 }
                 """,
