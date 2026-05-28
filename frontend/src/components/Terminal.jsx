@@ -3,6 +3,7 @@ import './Terminal.css'
 
 export default function Terminal({ result, running, stdin, onStdinChange, inputType }) {
   const outputRef = useRef(null)
+  const inputRef  = useRef(null)
 
   useEffect(() => {
     if (outputRef.current) {
@@ -18,27 +19,22 @@ export default function Terminal({ result, running, stdin, onStdinChange, inputT
     <div className="terminal-wrap">
       <div className="terminal-header">
         <span className="terminal-title">
-          <span className="terminal-icon">▸</span> Output Terminal
+          <span className="terminal-icon">▸</span> Terminal
         </span>
         {result && (
           <div className="terminal-stats">
             {result.success && (
               <>
-                <span className="stat compile">
-                  ⚙ {result.compileTimeMs}ms compile
-                </span>
-                <span className="stat exec">
-                  ⚡ {result.executionTimeMs}ms exec
-                </span>
+                <span className="stat compile">⚙ {result.compileTimeMs}ms compile</span>
+                <span className="stat exec">⚡ {result.executionTimeMs}ms exec</span>
               </>
             )}
-            <button className="btn-copy" onClick={copyOutput} title="Copy output">
-              ⎘
-            </button>
+            <button className="btn-copy" onClick={copyOutput} title="Copy output">⎘</button>
           </div>
         )}
       </div>
 
+      {/* ── Output ── */}
       <div className="terminal-output" ref={outputRef}>
         {!result && !running && (
           <div className="terminal-placeholder">
@@ -50,11 +46,7 @@ export default function Terminal({ result, running, stdin, onStdinChange, inputT
 
         {running && (
           <div className="terminal-loading">
-            <div className="loading-dots">
-              <span />
-              <span />
-              <span />
-            </div>
+            <div className="loading-dots"><span /><span /><span /></div>
             <span>Compiling &amp; running…</span>
           </div>
         )}
@@ -88,24 +80,34 @@ export default function Terminal({ result, running, stdin, onStdinChange, inputT
         )}
       </div>
 
-      <div className={`stdin-section ${inputType === 'STDIN' && !stdin.trim() ? 'stdin-warn' : ''}`}>
-        <label className="stdin-label">
-          <span className="stdin-icon">⌨</span>
-          {inputType === 'STDIN' ? 'Program Input (stdin) — required' : 'Stdin (optional)'}
+      {/* ── Inline stdin — looks like a real terminal input line ── */}
+      <div
+        className={`terminal-input-area ${inputType === 'STDIN' && !stdin.trim() ? 'input-warn' : ''}`}
+        onClick={() => inputRef.current?.focus()}
+      >
+        <div className="input-area-header">
+          <span className="input-area-label">
+            <span className="input-prompt-char">›</span> stdin
+          </span>
           {inputType === 'STDIN' && !stdin.trim() && (
-            <span className="stdin-warning">⚠ empty — program will time out</span>
+            <span className="input-warn-badge">⚠ empty — program will time out</span>
           )}
-        </label>
-        <textarea
-          className="stdin-textarea"
-          value={stdin}
-          onChange={e => onStdinChange(e.target.value)}
-          placeholder={inputType === 'STDIN'
-            ? 'Enter input values, one per line…'
-            : 'No input required for this program'}
-          rows={3}
-          spellCheck={false}
-        />
+          {inputType !== 'STDIN' && (
+            <span className="input-optional-badge">optional</span>
+          )}
+        </div>
+        <div className="input-line-wrap">
+          <span className="input-gutter-char">$</span>
+          <textarea
+            ref={inputRef}
+            className="terminal-stdin-input"
+            value={stdin}
+            onChange={e => onStdinChange(e.target.value)}
+            placeholder={inputType === 'STDIN' ? 'one value per line…' : 'no input needed'}
+            rows={3}
+            spellCheck={false}
+          />
+        </div>
       </div>
     </div>
   )

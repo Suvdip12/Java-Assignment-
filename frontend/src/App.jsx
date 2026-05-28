@@ -7,8 +7,8 @@ import Terminal from './components/Terminal'
 import AddProblemModal from './components/AddProblemModal'
 import './App.css'
 
-const MIN_H = 150
-const MAX_H = 650
+const MIN_H    = 100
+const MAX_H    = 9999   // effectively no upward limit; editor min-height guards the editor
 const DEFAULT_H = 300
 
 export default function App() {
