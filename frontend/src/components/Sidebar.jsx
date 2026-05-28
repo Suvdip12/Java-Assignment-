@@ -7,8 +7,21 @@ export default function Sidebar({ problems, selected, onSelect, onAdd, onDelete 
   const [collapsed, setCollapsed] = useState({})
   const [hoverId, setHoverId]     = useState(null)
 
+  const allParts = [...PARTS, 'Custom']
+  const allCollapsed = allParts.every(p => collapsed[p])
+
   const toggle = (part) =>
     setCollapsed(c => ({ ...c, [part]: !c[part] }))
+
+  const toggleAll = () => {
+    if (allCollapsed) {
+      setCollapsed({})
+    } else {
+      const all = {}
+      allParts.forEach(p => { all[p] = true })
+      setCollapsed(all)
+    }
+  }
 
   const byPart = (part) => problems.filter(p => p.part === part)
 
@@ -16,7 +29,16 @@ export default function Sidebar({ problems, selected, onSelect, onAdd, onDelete 
     <aside className="sidebar">
       <div className="sidebar-header">
         <span className="sidebar-title">Problems</span>
-        <span className="sidebar-count">{problems.length}</span>
+        <div className="sidebar-header-actions">
+          <span className="sidebar-count">{problems.length}</span>
+          <button
+            className="btn-collapse-all"
+            onClick={toggleAll}
+            title={allCollapsed ? 'Expand all' : 'Collapse all'}
+          >
+            {allCollapsed ? '⊞' : '⊟'}
+          </button>
+        </div>
       </div>
 
       <div className="sidebar-scroll">

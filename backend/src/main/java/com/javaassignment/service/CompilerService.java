@@ -33,17 +33,16 @@ public class CompilerService {
             Path sourceFile = tempDir.resolve(className + ".java");
             Files.writeString(sourceFile, code);
 
-            // Compile
+            // ── Compile ──────────────────────────────────────────────────────
             long compileStart = System.currentTimeMillis();
             ProcessBuilder compileBuilder = new ProcessBuilder("javac", className + ".java");
             compileBuilder.directory(tempDir.toFile());
             compileBuilder.redirectErrorStream(true);
 
             Process compileProcess = compileBuilder.start();
-            String compileOutput = readStream(compileProcess.getInputStream(), maxOutputBytes);
+            String compileOutput = readStreamFully(compileProcess.getInputStream(), maxOutputBytes);
             boolean compiled = compileProcess.waitFor(timeoutSeconds, TimeUnit.SECONDS);
-            long compileTime = System.currentTimeMillis() - compileStart;
-            response.setCompileTimeMs(compileTime);
+            response.setCompileTimeMs(System.currentTimeMillis() - compileStart);
 
             if (!compiled || compileProcess.exitValue() != 0) {
                 response.setSuccess(false);
@@ -51,28 +50,43 @@ public class CompilerService {
                 return response;
             }
 
-            // Execute
+            // ── Execute ───────────────────────────────────────────────────────
             long execStart = System.currentTimeMillis();
             ProcessBuilder runBuilder = new ProcessBuilder("java", "-cp", tempDir.toString(), className);
             runBuilder.directory(tempDir.toFile());
 
             Process runProcess = runBuilder.start();
 
-            // Write stdin
-            if (request.getStdin() != null && !request.getStdin().isBlank()) {
-                try (OutputStream os = runProcess.getOutputStream()) {
-                    os.write(request.getStdin().getBytes());
+            // Read stdout and stderr in separate threads to prevent buffer deadlock
+            StringBuilder stdoutBuf = new StringBuilder();
+            StringBuilder stderrBuf = new StringBuilder();
+
+            Thread stdoutThread = new Thread(() -> {
+                try { stdoutBuf.append(readStreamFully(runProcess.getInputStream(), maxOutputBytes)); }
+                catch (IOException ignored) {}
+            });
+            Thread stderrThread = new Thread(() -> {
+                try { stderrBuf.append(readStreamFully(runProcess.getErrorStream(), maxOutputBytes)); }
+                catch (IOException ignored) {}
+            });
+            stdoutThread.start();
+            stderrThread.start();
+
+            // Write stdin after readers are started
+            try (OutputStream os = runProcess.getOutputStream()) {
+                String stdin = request.getStdin();
+                if (stdin != null && !stdin.isBlank()) {
+                    // Ensure each line ends with newline so Scanner.nextLine() / nextDouble() works
+                    if (!stdin.endsWith("\n")) stdin = stdin + "\n";
+                    os.write(stdin.getBytes());
                     os.flush();
                 }
-            } else {
-                runProcess.getOutputStream().close();
-            }
+            } catch (IOException ignored) {}
 
-            String stdout = readStream(runProcess.getInputStream(), maxOutputBytes);
-            String stderr = readStream(runProcess.getErrorStream(), maxOutputBytes);
             boolean finished = runProcess.waitFor(timeoutSeconds, TimeUnit.SECONDS);
-            long execTime = System.currentTimeMillis() - execStart;
-            response.setExecutionTimeMs(execTime);
+            stdoutThread.join(3000);
+            stderrThread.join(3000);
+            response.setExecutionTimeMs(System.currentTimeMillis() - execStart);
 
             if (!finished) {
                 runProcess.destroyForcibly();
@@ -81,9 +95,12 @@ public class CompilerService {
                 return response;
             }
 
+            String stdout = stdoutBuf.toString();
+            String stderr = stderrBuf.toString();
+
             if (runProcess.exitValue() != 0 && !stderr.isBlank()) {
                 response.setSuccess(false);
-                response.setOutput(stdout);
+                response.setOutput(stdout.isBlank() ? null : stdout);
                 response.setRuntimeError(stderr);
                 return response;
             }
@@ -95,28 +112,23 @@ public class CompilerService {
             response.setSuccess(false);
             response.setRuntimeError("Server error: " + e.getMessage());
         } finally {
-            if (tempDir != null) {
-                deleteDirectory(tempDir);
-            }
+            if (tempDir != null) deleteDirectory(tempDir);
         }
 
         return response;
     }
 
     private String extractMainClassName(String code) {
-        // Try public class first
         Pattern publicClass = Pattern.compile("public\\s+class\\s+(\\w+)");
         Matcher m = publicClass.matcher(code);
         if (m.find()) return m.group(1);
 
-        // Find class with main method
         Pattern mainMethod = Pattern.compile(
             "class\\s+(\\w+)[^{]*\\{(?:[^{}]|\\{[^{}]*\\})*public\\s+static\\s+void\\s+main",
             Pattern.DOTALL);
         m = mainMethod.matcher(code);
         if (m.find()) return m.group(1);
 
-        // Fallback: last class defined
         Pattern anyClass = Pattern.compile("class\\s+(\\w+)");
         m = anyClass.matcher(code);
         String last = "Main";
@@ -124,23 +136,24 @@ public class CompilerService {
         return last;
     }
 
-    private String readStream(InputStream is, int maxBytes) throws IOException {
-        byte[] buffer = new byte[maxBytes];
-        int totalRead = 0;
+    private String readStreamFully(InputStream is, int maxBytes) throws IOException {
+        ByteArrayOutputStream buf = new ByteArrayOutputStream();
+        byte[] chunk = new byte[4096];
         int read;
-        while (totalRead < maxBytes && (read = is.read(buffer, totalRead, maxBytes - totalRead)) != -1) {
-            totalRead += read;
+        int total = 0;
+        while (total < maxBytes && (read = is.read(chunk)) != -1) {
+            int take = Math.min(read, maxBytes - total);
+            buf.write(chunk, 0, take);
+            total += take;
         }
-        return new String(buffer, 0, totalRead);
+        return buf.toString();
     }
 
     private void deleteDirectory(Path dir) {
         try {
             Files.walk(dir)
                 .sorted(Comparator.reverseOrder())
-                .forEach(p -> {
-                    try { Files.deleteIfExists(p); } catch (IOException ignored) {}
-                });
+                .forEach(p -> { try { Files.deleteIfExists(p); } catch (IOException ignored) {} });
         } catch (IOException ignored) {}
     }
 }
