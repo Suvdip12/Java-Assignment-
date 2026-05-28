@@ -126,8 +126,8 @@ export default function Terminal({ code, runTrigger, problemId, onRunningChange 
       setIsRunning(false)
     }
 
-    // Focus ghost input automatically so keyboard is ready
-    setTimeout(() => ghostRef.current?.focus(), 100)
+    // Do NOT auto-focus here — programmatic focus on iOS Safari triggers
+    // auto-zoom even at font-size 16px. User taps the terminal to type.
   }
 
   // ── Ghost textarea handlers ────────────────────────────────────────────────
@@ -252,7 +252,7 @@ export default function Terminal({ code, runTrigger, problemId, onRunningChange 
           spellCheck={false}
           rows={1}
           aria-hidden="true"
-          tabIndex={isRunning ? 0 : -1}
+          tabIndex={-1}
         />
       </div>
 
