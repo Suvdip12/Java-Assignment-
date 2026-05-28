@@ -3,3 +3,5 @@ frontend/node_modules/
 backend/data/
 *.class
 *.log
+StudyNotes.pdf
+generate_notes.py
