@@ -1,4 +1,9 @@
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  touch-action: manipulation; /* disables double-tap zoom on every element */
+}
 
 :root {
   --bg-base:      #0d1117;
@@ -41,6 +46,8 @@ html, body, #root {
   font-family: var(--font-ui);
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
+  touch-action: manipulation;      /* Android: disables double-tap zoom globally */
+  -webkit-text-size-adjust: 100%;  /* prevents font scaling on orientation change */
 }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }
