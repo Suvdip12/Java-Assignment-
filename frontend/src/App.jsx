@@ -7,55 +7,53 @@ import Terminal from './components/Terminal'
 import AddProblemModal from './components/AddProblemModal'
 import './App.css'
 
-const MIN_TERMINAL_H = 120
-const MAX_TERMINAL_H = 580
-const DEFAULT_TERMINAL_H = 280
+const MIN_H = 100
+const MAX_H = 620
+const DEFAULT_H = 280
 
 export default function App() {
-  const [problems, setProblems]       = useState([])
-  const [selected, setSelected]       = useState(null)
-  const [code, setCode]               = useState('')
-  const [stdin, setStdin]             = useState('')
-  const [result, setResult]           = useState(null)
-  const [running, setRunning]         = useState(false)
+  const [problems, setProblems]         = useState([])
+  const [selected, setSelected]         = useState(null)
+  const [code, setCode]                 = useState('')
+  const [stdin, setStdin]               = useState('')
+  const [result, setResult]             = useState(null)
+  const [running, setRunning]           = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
-  const [dirty, setDirty]             = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [terminalH, setTerminalH]     = useState(DEFAULT_TERMINAL_H)
+  const [dirty, setDirty]               = useState(false)
+  const [sidebarOpen, setSidebarOpen]   = useState(true)
+  const [terminalH, setTerminalH]       = useState(DEFAULT_H)
+  const [isDragging, setIsDragging]     = useState(false)  // overlay while dragging
 
-  // Drag-to-resize terminal
-  const dragging   = useRef(false)
-  const dragStartY = useRef(0)
-  const dragStartH = useRef(0)
+  const dragRef = useRef({ active: false, startY: 0, startH: 0 })
 
-  const onResizeStart = useCallback((e) => {
-    dragging.current   = true
-    dragStartY.current = e.clientY
-    dragStartH.current = terminalH
-    document.body.style.cursor    = 'row-resize'
-    document.body.style.userSelect = 'none'
-  }, [terminalH])
+  // ── Drag-to-resize terminal ────────────────────────────────────────────────
+  const onResizeStart = (e) => {
+    e.preventDefault()
+    dragRef.current = { active: true, startY: e.clientY, startH: terminalH }
+    setIsDragging(true)
+  }
 
   useEffect(() => {
     const onMove = (e) => {
-      if (!dragging.current) return
-      const delta  = dragStartY.current - e.clientY          // drag up = bigger terminal
-      const newH   = Math.min(MAX_TERMINAL_H, Math.max(MIN_TERMINAL_H, dragStartH.current + delta))
+      if (!dragRef.current.active) return
+      const delta = dragRef.current.startY - e.clientY   // up = bigger
+      const newH  = Math.min(MAX_H, Math.max(MIN_H, dragRef.current.startH + delta))
       setTerminalH(newH)
     }
     const onUp = () => {
-      dragging.current = false
-      document.body.style.cursor     = ''
-      document.body.style.userSelect = ''
+      if (!dragRef.current.active) return
+      dragRef.current.active = false
+      setIsDragging(false)
     }
     window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup',   onUp)
+    window.addEventListener('mouseup', onUp)
     return () => {
       window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup',   onUp)
+      window.removeEventListener('mouseup', onUp)
     }
   }, [])
 
+  // ── Load problems ──────────────────────────────────────────────────────────
   useEffect(() => {
     fetch('/api/problems')
       .then(r => r.json())
@@ -128,15 +126,18 @@ export default function App() {
   }
 
   useEffect(() => {
-    const handler = (e) => {
+    const h = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); runCode() }
     }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
   }, [runCode])
 
   return (
     <div className="app">
+      {/* Full-screen drag overlay — blocks Monaco from stealing mouse events */}
+      {isDragging && <div className="drag-overlay" />}
+
       <TopBar sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen(v => !v)} />
 
       <div className="workspace">
@@ -157,7 +158,8 @@ export default function App() {
               <ProblemDescription problem={selected} dirty={dirty} />
 
               <div className="editor-terminal">
-                {/* ── Editor ── */}
+
+                {/* ── Code Editor ── */}
                 <div className="editor-pane">
                   <div className="pane-header">
                     <span className="pane-title">
@@ -178,7 +180,9 @@ export default function App() {
                         disabled={running}
                         title="Run (Ctrl+Enter)"
                       >
-                        {running ? <><span className="spinner" /> Running…</> : <>▶ Run</>}
+                        {running
+                          ? <><span className="spinner" /> Running…</>
+                          : <>▶&nbsp;Run</>}
                       </button>
                     </div>
                   </div>
@@ -186,7 +190,11 @@ export default function App() {
                 </div>
 
                 {/* ── Drag Handle ── */}
-                <div className="resize-handle" onMouseDown={onResizeStart} title="Drag to resize terminal" />
+                <div
+                  className={`resize-handle ${isDragging ? 'dragging' : ''}`}
+                  onMouseDown={onResizeStart}
+                  title="Drag up / down to resize terminal"
+                />
 
                 {/* ── Terminal ── */}
                 <div className="terminal-pane" style={{ height: terminalH }}>
@@ -198,6 +206,7 @@ export default function App() {
                     inputType={selected.inputType}
                   />
                 </div>
+
               </div>
             </>
           ) : (

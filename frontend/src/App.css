@@ -61,12 +61,24 @@
   transition: opacity 0.15s;
 }
 
-.resize-handle:hover {
+.resize-handle:hover,
+.resize-handle.dragging {
   background: var(--accent);
 }
 
-.resize-handle:hover::after {
+.resize-handle:hover::after,
+.resize-handle.dragging::after {
   opacity: 1;
+}
+
+/* Full-screen overlay that captures mouse events while dragging the resize handle,
+   preventing Monaco Editor from stealing mousemove/mouseup during drag */
+.drag-overlay {
+  position: fixed;
+  inset: 0;
+  cursor: row-resize;
+  z-index: 9999;
+  user-select: none;
 }
 
 .terminal-pane {

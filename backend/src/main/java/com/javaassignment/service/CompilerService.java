@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.Comparator;
 import java.util.concurrent.TimeUnit;
@@ -26,72 +27,94 @@ public class CompilerService {
         Path tempDir = null;
 
         try {
-            tempDir = Files.createTempDirectory("java_compile_");
-            String code = request.getCode();
+            tempDir = Files.createTempDirectory("jac_");
+            String code      = request.getCode();
             String className = extractMainClassName(code);
 
-            Files.writeString(tempDir.resolve(className + ".java"), code);
+            Files.writeString(tempDir.resolve(className + ".java"), code, StandardCharsets.UTF_8);
 
-            // ── Compile ──────────────────────────────────────────────────────
+            // ── 1. COMPILE ────────────────────────────────────────────────────
             long compileStart = System.currentTimeMillis();
-            ProcessBuilder compileBuilder = new ProcessBuilder("javac", className + ".java");
-            compileBuilder.directory(tempDir.toFile());
-            compileBuilder.redirectErrorStream(true);
 
-            Process compileProcess = compileBuilder.start();
-            String compileOutput = drain(compileProcess.getInputStream());
-            boolean compiled = compileProcess.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+            ProcessBuilder javac = new ProcessBuilder("javac", className + ".java");
+            javac.directory(tempDir.toFile());
+            javac.redirectErrorStream(true);
+
+            Process compileProc = javac.start();
+            String  compileOut  = drain(compileProc.getInputStream());
+            boolean compiled    = compileProc.waitFor(timeoutSeconds, TimeUnit.SECONDS);
             response.setCompileTimeMs(System.currentTimeMillis() - compileStart);
 
-            if (!compiled || compileProcess.exitValue() != 0) {
+            if (!compiled || compileProc.exitValue() != 0) {
                 response.setSuccess(false);
-                response.setCompileError(compileOutput.isEmpty() ? "Compilation timed out" : compileOutput);
+                response.setCompileError(compileOut.isEmpty() ? "Compile timed out." : compileOut);
                 return response;
             }
 
-            // ── Write stdin to a temp file (most reliable approach) ──────────
-            ProcessBuilder runBuilder = new ProcessBuilder("java", "-cp", tempDir.toString(), className);
-            runBuilder.directory(tempDir.toFile());
-
-            String stdin = request.getStdin();
-            if (stdin != null && !stdin.isBlank()) {
-                if (!stdin.endsWith("\n")) stdin += "\n";
-                Path stdinFile = tempDir.resolve("stdin.txt");
-                Files.writeString(stdinFile, stdin);
-                runBuilder.redirectInput(stdinFile.toFile());   // process reads stdin from file
+            // ── 2. PREPARE STDIN ─────────────────────────────────────────────
+            // Normalise line-endings so Scanner.nextLine() / nextDouble() works
+            String rawStdin = request.getStdin();
+            final String stdinData;
+            if (rawStdin != null && !rawStdin.isBlank()) {
+                String s = rawStdin.replace("\r\n", "\n").replace("\r", "\n").trim();
+                stdinData = s + "\n";           // trailing newline = EOF signal for Scanner
+            } else {
+                stdinData = null;
             }
 
-            // ── Execute ───────────────────────────────────────────────────────
+            // ── 3. EXECUTE ────────────────────────────────────────────────────
             long execStart = System.currentTimeMillis();
-            Process runProcess = runBuilder.start();
 
-            // Close stdin pipe if no input file was set
-            if (stdin == null || stdin.isBlank()) {
-                runProcess.getOutputStream().close();
-            }
+            ProcessBuilder java = new ProcessBuilder("java", "-cp", tempDir.toString(), className);
+            java.directory(tempDir.toFile());
+            // DO NOT redirect stdin from file – write via pipe in a thread (works everywhere)
 
-            // Read stdout + stderr in parallel threads to prevent buffer deadlock
-            StringBuilder stdoutBuf = new StringBuilder();
-            StringBuilder stderrBuf = new StringBuilder();
-            Thread t1 = new Thread(() -> { try { stdoutBuf.append(drain(runProcess.getInputStream()));  } catch (IOException ignored) {} });
-            Thread t2 = new Thread(() -> { try { stderrBuf.append(drain(runProcess.getErrorStream())); } catch (IOException ignored) {} });
-            t1.start(); t2.start();
+            Process runProc = java.start();
 
-            boolean finished = runProcess.waitFor(timeoutSeconds, TimeUnit.SECONDS);
-            t1.join(3000); t2.join(3000);
+            // Three parallel threads: write stdin, read stdout, read stderr
+            // This prevents all buffer-deadlock scenarios.
+            StringBuilder outBuf = new StringBuilder();
+            StringBuilder errBuf = new StringBuilder();
+
+            Thread tOut = new Thread(() -> {
+                try { outBuf.append(drain(runProc.getInputStream())); }
+                catch (IOException ignored) {}
+            });
+            Thread tErr = new Thread(() -> {
+                try { errBuf.append(drain(runProc.getErrorStream())); }
+                catch (IOException ignored) {}
+            });
+            Thread tIn = new Thread(() -> {
+                try (OutputStream os = runProc.getOutputStream()) {
+                    if (stdinData != null) {
+                        os.write(stdinData.getBytes(StandardCharsets.UTF_8));
+                        os.flush();
+                    }
+                    // closing stream sends EOF → Scanner stops waiting
+                } catch (IOException ignored) {}
+            });
+
+            tOut.start();
+            tErr.start();
+            tIn.start();   // start AFTER readers so no output is missed
+
+            boolean done = runProc.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+            tOut.join(3000);
+            tErr.join(1000);
+            tIn.join(1000);
             response.setExecutionTimeMs(System.currentTimeMillis() - execStart);
 
-            if (!finished) {
-                runProcess.destroyForcibly();
+            if (!done) {
+                runProc.destroyForcibly();
                 response.setSuccess(false);
-                response.setRuntimeError("Execution timed out after " + timeoutSeconds + " seconds.");
+                response.setRuntimeError("Timed out after " + timeoutSeconds + "s – check for infinite loops or missing input.");
                 return response;
             }
 
-            String stdout = stdoutBuf.toString();
-            String stderr = stderrBuf.toString();
+            String stdout = outBuf.toString();
+            String stderr = errBuf.toString();
 
-            if (runProcess.exitValue() != 0 && !stderr.isBlank()) {
+            if (runProc.exitValue() != 0 && !stderr.isBlank()) {
                 response.setSuccess(false);
                 response.setOutput(stdout.isBlank() ? null : stdout);
                 response.setRuntimeError(stderr);
@@ -105,18 +128,20 @@ public class CompilerService {
             response.setSuccess(false);
             response.setRuntimeError("Server error: " + e.getMessage());
         } finally {
-            if (tempDir != null) deleteDirectory(tempDir);
+            if (tempDir != null) deleteDir(tempDir);
         }
 
         return response;
     }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
 
     private String extractMainClassName(String code) {
         Matcher m = Pattern.compile("public\\s+class\\s+(\\w+)").matcher(code);
         if (m.find()) return m.group(1);
 
         m = Pattern.compile("class\\s+(\\w+)[^{]*\\{(?:[^{}]|\\{[^{}]*\\})*public\\s+static\\s+void\\s+main",
-            Pattern.DOTALL).matcher(code);
+                Pattern.DOTALL).matcher(code);
         if (m.find()) return m.group(1);
 
         m = Pattern.compile("class\\s+(\\w+)").matcher(code);
@@ -128,15 +153,15 @@ public class CompilerService {
     private String drain(InputStream is) throws IOException {
         ByteArrayOutputStream buf = new ByteArrayOutputStream();
         byte[] chunk = new byte[4096];
-        int read;
-        while ((read = is.read(chunk)) != -1) buf.write(chunk, 0, read);
-        return buf.toString();
+        int n;
+        while ((n = is.read(chunk)) != -1) buf.write(chunk, 0, n);
+        return buf.toString(StandardCharsets.UTF_8);
     }
 
-    private void deleteDirectory(Path dir) {
+    private void deleteDir(Path dir) {
         try {
             Files.walk(dir).sorted(Comparator.reverseOrder())
-                .forEach(p -> { try { Files.deleteIfExists(p); } catch (IOException ignored) {} });
+                    .forEach(p -> { try { Files.deleteIfExists(p); } catch (IOException ignored) {} });
         } catch (IOException ignored) {}
     }
 }
