@@ -135,6 +135,7 @@
   cursor: pointer;
   transition: all 0.15s;
   line-height: 1;
+  touch-action: manipulation;
 }
 
 .btn-zoom:hover {
@@ -157,6 +158,7 @@
   font-weight: 600;
   transition: all 0.15s ease;
   white-space: nowrap;
+  touch-action: manipulation;
 }
 
 .btn-run:hover:not(:disabled) {

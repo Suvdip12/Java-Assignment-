@@ -4,6 +4,7 @@
   height: 100%;
   background: #0d1117;
   overflow: hidden;
+  touch-action: manipulation; /* disables double-tap zoom on the whole terminal panel */
 }
 
 /* ── Header ── */
@@ -74,6 +75,7 @@
   cursor: pointer;
   transition: all 0.15s;
   line-height: 1;
+  touch-action: manipulation;
 }
 .btn-term-zoom:hover { background: var(--bg-hover); color: var(--text-primary); }
 
@@ -95,7 +97,8 @@
   padding: 12px 14px 6px;
   outline: none;
   cursor: text;
-  position: relative;  /* required for ghost textarea absolute positioning */
+  position: relative;
+  touch-action: manipulation; /* disables double-tap zoom; pan still works */
 }
 
 /* Highlight border when focused (keyboard active) */
@@ -162,20 +165,28 @@
 }
 
 /*
-  Ghost textarea — real <textarea> so mobile browsers open the keyboard on focus,
-  but visually invisible. Must stay within the viewport (not left:-9999px) for
-  iOS/Android to actually trigger the soft keyboard.
-  font-size:16px prevents iOS Safari from auto-zooming on focus.
+  Ghost textarea — real <textarea> so mobile browsers open the keyboard on focus.
+
+  position:fixed keeps it in the viewport at all times so iOS never "scrolls to
+  show the focused element" (that scroll looks like a zoom jump to the user).
+
+  font-size:16px !important is the ONLY reliable way to stop iOS Safari from
+  zooming on input focus — viewport user-scalable=no is ignored since iOS 10.
+
+  touch-action:manipulation disables double-tap zoom on the element itself.
+  pointer-events:none lets taps fall through to the parent div which calls
+  focusGhost() — keeping the focused element fixed avoids the layout jump.
 */
 .terminal-ghost-input {
-  position: absolute;
+  position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  height: 2px;
+  height: 1px;
   opacity: 0;
-  pointer-events: none; /* clicks pass through to the parent div */
-  font-size: 16px;
+  pointer-events: none;
+  font-size: 16px !important;
+  touch-action: manipulation;
   border: none;
   outline: none;
   padding: 0;

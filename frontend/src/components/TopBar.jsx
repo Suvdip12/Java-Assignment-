@@ -14,7 +14,7 @@ export default function TopBar({ sidebarOpen, onToggleSidebar }) {
         <div className="topbar-logo">
           <span className="logo-icon">☕</span>
           <div>
-            <span className="logo-title">Java Assignment Compiler</span>
+            <span className="logo-title">Java Assignment</span>
             <span className="logo-sub">Live Online IDE</span>
           </div>
         </div>
