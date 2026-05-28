@@ -4,7 +4,7 @@ COPY backend/pom.xml .
 COPY backend/src ./src
 RUN mvn package -DskipTests -q
 
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:21-jdk-alpine
 WORKDIR /app
 COPY --from=build /app/target/java-assignment-1.0.0.jar app.jar
 EXPOSE 8080
