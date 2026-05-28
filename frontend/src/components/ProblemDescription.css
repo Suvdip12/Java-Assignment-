@@ -1,0 +1,118 @@
+.problem-desc {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 14px 20px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.desc-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.desc-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.bc-part {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
+}
+
+.bc-sep {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.bc-qnum {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  font-family: var(--font-code);
+  text-transform: uppercase;
+}
+
+.desc-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.3;
+  margin-bottom: 5px;
+}
+
+.desc-body {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  max-width: 700px;
+}
+
+.desc-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.desc-badges {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.badge-type {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 20px;
+}
+
+.badge-type.stdin {
+  background: rgba(227, 179, 65, 0.12);
+  color: var(--yellow);
+  border: 1px solid rgba(227, 179, 65, 0.25);
+}
+
+.badge-type.none {
+  background: rgba(63, 185, 80, 0.1);
+  color: var(--green);
+  border: 1px solid rgba(63, 185, 80, 0.2);
+}
+
+.badge-dirty {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 20px;
+  background: rgba(88, 166, 255, 0.1);
+  color: var(--accent);
+  border: 1px solid rgba(88, 166, 255, 0.2);
+}
+
+.desc-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.desc-hint kbd {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 10px;
+  font-family: var(--font-code);
+  color: var(--text-secondary);
+}

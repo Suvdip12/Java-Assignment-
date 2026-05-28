@@ -1,0 +1,108 @@
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  height: 56px;
+  background: linear-gradient(135deg, #0d1b3e 0%, #162447 50%, #1a2a4a 100%);
+  border-bottom: 1px solid rgba(88, 166, 255, 0.2);
+  flex-shrink: 0;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.4);
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.topbar-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo-icon {
+  font-size: 22px;
+  filter: drop-shadow(0 0 6px rgba(255,200,0,0.5));
+}
+
+.logo-title {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  color: #e6edf3;
+  letter-spacing: 0.3px;
+}
+
+.logo-sub {
+  display: block;
+  font-size: 10px;
+  color: #58a6ff;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.topbar-divider {
+  width: 1px;
+  height: 32px;
+  background: rgba(88, 166, 255, 0.2);
+}
+
+.university-name {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #c9d1d9;
+}
+
+.university-sub {
+  display: block;
+  font-size: 11px;
+  color: #8b949e;
+}
+
+/* Student card */
+.topbar-right {
+  display: flex;
+  align-items: center;
+}
+
+.student-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(88, 166, 255, 0.2);
+  border-radius: var(--radius-md);
+  padding: 6px 12px;
+}
+
+.student-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #58a6ff, #bc8cff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0d1117;
+  flex-shrink: 0;
+}
+
+.student-name {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #e6edf3;
+}
+
+.student-roll {
+  display: block;
+  font-size: 10px;
+  color: #8b949e;
+  font-family: var(--font-code);
+}
