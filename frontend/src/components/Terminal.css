@@ -165,35 +165,45 @@
 }
 
 /*
-  Ghost textarea — real <textarea> so mobile browsers open the keyboard on focus.
+  Ghost textarea — a transparent overlay that fills the entire terminal output
+  area when a process is running.
 
-  position:fixed keeps it in the viewport at all times so iOS never "scrolls to
-  show the focused element" (that scroll looks like a zoom jump to the user).
+  WHY this approach:
+    iOS Safari zooms when an <input> is focused via programmatic .focus() called
+    from a click/touch handler. The ONLY reliable way to avoid zoom is a direct
+    native tap on the input element itself. By covering the terminal output area
+    with pointer-events:all, every tap the user makes on the terminal lands
+    directly on this textarea — no JS indirection, no programmatic focus, no zoom.
 
-  font-size:16px !important is the ONLY reliable way to stop iOS Safari from
-  zooming on input focus — viewport user-scalable=no is ignored since iOS 10.
+    touch-action:pan-y lets vertical scroll gestures pass through to the
+    scrollable .terminal-output parent so the output can still be scrolled.
 
-  touch-action:manipulation disables double-tap zoom on the element itself.
-  pointer-events:none lets taps fall through to the parent div which calls
-  focusGhost() — keeping the focused element fixed avoids the layout jump.
+    font-size:16px !important prevents the secondary iOS auto-zoom that happens
+    when an input with font-size < 16px is focused.
+
+  When NOT running (.ghost-active absent) pointer-events:none makes it invisible
+  to touches so the user can interact normally with the output text.
 */
 .terminal-ghost-input {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
+  position: absolute;
+  inset: 0;
+  z-index: 10;
   opacity: 0;
-  pointer-events: none;
+  pointer-events: none;        /* inactive by default */
   font-size: 16px !important;
-  touch-action: manipulation;
-  border: none;
-  outline: none;
-  padding: 0;
-  margin: 0;
+  touch-action: pan-y;         /* allow vertical scroll; block double-tap zoom */
+  overflow: hidden;
   resize: none;
   background: transparent;
   color: transparent;
   caret-color: transparent;
-  overflow: hidden;
+  border: none;
+  outline: none;
+  padding: 0;
+  margin: 0;
+  cursor: text;
+}
+
+.terminal-ghost-input.ghost-active {
+  pointer-events: all;         /* receives all taps when process is running */
 }

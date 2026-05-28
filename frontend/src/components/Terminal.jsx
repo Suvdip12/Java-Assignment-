@@ -222,7 +222,6 @@ export default function Terminal({ code, runTrigger, problemId, onRunningChange 
       <div
         className="terminal-output"
         ref={termRef}
-        onClick={focusGhost}
       >
         {!displayContent && !isRunning && (
           <div className="terminal-placeholder">
@@ -249,9 +248,16 @@ export default function Terminal({ code, runTrigger, problemId, onRunningChange 
           Mobile browsers open the keyboard when a real element is focused.
           fontSize 16px prevents iOS Safari from auto-zooming on focus.
         */}
+        {/*
+          Ghost textarea: when running it becomes a full transparent overlay so
+          the user's tap lands DIRECTLY on a real input element.
+          Native tap-to-focus = iOS never zooms.
+          Programmatic .focus() from an onClick handler = iOS zooms — avoided.
+          touch-action:pan-y lets vertical scroll propagate to .terminal-output.
+        */}
         <textarea
           ref={ghostRef}
-          className="terminal-ghost-input"
+          className={`terminal-ghost-input${isRunning ? ' ghost-active' : ''}`}
           onInput={handleGhostInput}
           onKeyDown={handleGhostKeyDown}
           autoCapitalize="none"
