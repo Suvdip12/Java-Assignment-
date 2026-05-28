@@ -8,16 +8,15 @@ import AddProblemModal from './components/AddProblemModal'
 import './App.css'
 
 const MIN_H    = 100
-const MAX_H    = 9999   // effectively no upward limit; editor min-height guards the editor
+const MAX_H    = 9999
 const DEFAULT_H = 300
 
 export default function App() {
   const [problems, setProblems]         = useState([])
   const [selected, setSelected]         = useState(null)
   const [code, setCode]                 = useState('')
-  const [stdin, setStdin]               = useState('')
-  const [result, setResult]             = useState(null)
-  const [running, setRunning]           = useState(false)
+  const [running, setRunning]           = useState(false)   // reported by Terminal
+  const [runTrigger, setRunTrigger]     = useState(0)       // increment to trigger a run
   const [showAddModal, setShowAddModal] = useState(false)
   const [dirty, setDirty]               = useState(false)
   const [sidebarOpen, setSidebarOpen]   = useState(true)
@@ -25,26 +24,20 @@ export default function App() {
 
   const dragRef = useRef({ active: false, startY: 0, startH: 0 })
 
-  // ── Drag-to-resize using Pointer Capture ──────────────────────────────────
-  // setPointerCapture routes ALL pointer events to this element, bypassing
-  // Monaco Editor's iframe completely — no overlay needed.
+  // ── Drag-to-resize (pointer capture) ─────────────────────────────────────
   const onHandlePointerDown = (e) => {
     e.preventDefault()
     e.currentTarget.setPointerCapture(e.pointerId)
     dragRef.current = { active: true, startY: e.clientY, startH: terminalH }
   }
-
   const onHandlePointerMove = (e) => {
     if (!dragRef.current.active) return
-    const delta = dragRef.current.startY - e.clientY   // drag up → terminal taller
+    const delta = dragRef.current.startY - e.clientY
     setTerminalH(Math.min(MAX_H, Math.max(MIN_H, dragRef.current.startH + delta)))
   }
+  const onHandlePointerUp = () => { dragRef.current.active = false }
 
-  const onHandlePointerUp = () => {
-    dragRef.current.active = false
-  }
-
-  // ── Load problems ──────────────────────────────────────────────────────────
+  // ── Load problems ─────────────────────────────────────────────────────────
   useEffect(() => {
     fetch('/api/problems')
       .then(r => r.json())
@@ -57,8 +50,6 @@ export default function App() {
   const selectProblem = (p) => {
     setSelected(p)
     setCode(p.code)
-    setStdin(p.defaultInput || '')
-    setResult(null)
     setDirty(false)
   }
 
@@ -67,23 +58,10 @@ export default function App() {
     setDirty(val !== selected?.code)
   }
 
-  const runCode = useCallback(async () => {
-    if (!code.trim() || running) return
-    setRunning(true)
-    setResult(null)
-    try {
-      const res = await fetch('/api/compile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, stdin }),
-      })
-      setResult(await res.json())
-    } catch (e) {
-      setResult({ success: false, runtimeError: 'Network error: ' + e.message })
-    } finally {
-      setRunning(false)
-    }
-  }, [code, stdin, running])
+  const runCode = useCallback(() => {
+    if (running) return
+    setRunTrigger(t => t + 1)
+  }, [running])
 
   const resetCode = async () => {
     if (!selected) return
@@ -91,7 +69,6 @@ export default function App() {
     const data = await res.json()
     setCode(data.code)
     setDirty(false)
-    setResult(null)
   }
 
   const addProblem = async (p) => {
@@ -112,7 +89,7 @@ export default function App() {
     setProblems(updated)
     if (selected?.id === id) {
       if (updated.length > 0) selectProblem(updated[0])
-      else { setSelected(null); setCode(''); setResult(null) }
+      else { setSelected(null); setCode('') }
     }
   }
 
@@ -177,24 +154,23 @@ export default function App() {
                   <CodeEditor value={code} onChange={handleCodeChange} />
                 </div>
 
-                {/* ── Drag Handle — pointer capture keeps events here even over Monaco ── */}
+                {/* ── Drag Handle ── */}
                 <div
                   className="resize-handle"
                   onPointerDown={onHandlePointerDown}
                   onPointerMove={onHandlePointerMove}
                   onPointerUp={onHandlePointerUp}
                   onPointerCancel={onHandlePointerUp}
-                  title="Drag up / down to resize terminal"
+                  title="Drag to resize terminal"
                 />
 
-                {/* ── Terminal ── */}
+                {/* ── Interactive Terminal ── */}
                 <div className="terminal-pane" style={{ height: terminalH }}>
                   <Terminal
-                    result={result}
-                    running={running}
-                    stdin={stdin}
-                    onStdinChange={setStdin}
-                    inputType={selected.inputType}
+                    code={code}
+                    runTrigger={runTrigger}
+                    problemId={selected.id}
+                    onRunningChange={setRunning}
                   />
                 </div>
 
