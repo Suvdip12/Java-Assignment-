@@ -3,7 +3,7 @@ import './Sidebar.css'
 
 const PARTS = ['Part 2', 'Part 3', 'Part 4']
 
-export default function Sidebar({ problems, selected, onSelect, onAdd, onDelete }) {
+export default function Sidebar({ problems, selected, onSelect, onAdd, onDelete, onClose }) {
   const [collapsed, setCollapsed] = useState({})
   const [hoverId, setHoverId]     = useState(null)
 

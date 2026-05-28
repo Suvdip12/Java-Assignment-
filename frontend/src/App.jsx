@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import TopBar from './components/TopBar'
 import Sidebar from './components/Sidebar'
 import ProblemDescription from './components/ProblemDescription'
@@ -6,6 +6,10 @@ import CodeEditor from './components/CodeEditor'
 import Terminal from './components/Terminal'
 import AddProblemModal from './components/AddProblemModal'
 import './App.css'
+
+const MIN_TERMINAL_H = 120
+const MAX_TERMINAL_H = 580
+const DEFAULT_TERMINAL_H = 280
 
 export default function App() {
   const [problems, setProblems]       = useState([])
@@ -16,6 +20,41 @@ export default function App() {
   const [running, setRunning]         = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
   const [dirty, setDirty]             = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [terminalH, setTerminalH]     = useState(DEFAULT_TERMINAL_H)
+
+  // Drag-to-resize terminal
+  const dragging   = useRef(false)
+  const dragStartY = useRef(0)
+  const dragStartH = useRef(0)
+
+  const onResizeStart = useCallback((e) => {
+    dragging.current   = true
+    dragStartY.current = e.clientY
+    dragStartH.current = terminalH
+    document.body.style.cursor    = 'row-resize'
+    document.body.style.userSelect = 'none'
+  }, [terminalH])
+
+  useEffect(() => {
+    const onMove = (e) => {
+      if (!dragging.current) return
+      const delta  = dragStartY.current - e.clientY          // drag up = bigger terminal
+      const newH   = Math.min(MAX_TERMINAL_H, Math.max(MIN_TERMINAL_H, dragStartH.current + delta))
+      setTerminalH(newH)
+    }
+    const onUp = () => {
+      dragging.current = false
+      document.body.style.cursor     = ''
+      document.body.style.userSelect = ''
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup',   onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup',   onUp)
+    }
+  }, [])
 
   useEffect(() => {
     fetch('/api/problems')
@@ -49,8 +88,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code, stdin }),
       })
-      const data = await res.json()
-      setResult(data)
+      setResult(await res.json())
     } catch (e) {
       setResult({ success: false, runtimeError: 'Network error: ' + e.message })
     } finally {
@@ -60,7 +98,7 @@ export default function App() {
 
   const resetCode = async () => {
     if (!selected) return
-    const res = await fetch(`/api/problems/${selected.id}/reset`, { method: 'POST' })
+    const res  = await fetch(`/api/problems/${selected.id}/reset`, { method: 'POST' })
     const data = await res.json()
     setCode(data.code)
     setDirty(false)
@@ -68,7 +106,7 @@ export default function App() {
   }
 
   const addProblem = async (p) => {
-    const res = await fetch('/api/problems', {
+    const res  = await fetch('/api/problems', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(p),
@@ -89,13 +127,9 @@ export default function App() {
     }
   }
 
-  // Keyboard shortcut: Ctrl+Enter to run
   useEffect(() => {
     const handler = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-        e.preventDefault()
-        runCode()
-      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); runCode() }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -103,20 +137,27 @@ export default function App() {
 
   return (
     <div className="app">
-      <TopBar />
+      <TopBar sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen(v => !v)} />
+
       <div className="workspace">
-        <Sidebar
-          problems={problems}
-          selected={selected}
-          onSelect={selectProblem}
-          onAdd={() => setShowAddModal(true)}
-          onDelete={deleteProblem}
-        />
+        {sidebarOpen && (
+          <Sidebar
+            problems={problems}
+            selected={selected}
+            onSelect={selectProblem}
+            onAdd={() => setShowAddModal(true)}
+            onDelete={deleteProblem}
+            onClose={() => setSidebarOpen(false)}
+          />
+        )}
+
         <main className="main">
           {selected ? (
             <>
               <ProblemDescription problem={selected} dirty={dirty} />
+
               <div className="editor-terminal">
+                {/* ── Editor ── */}
                 <div className="editor-pane">
                   <div className="pane-header">
                     <span className="pane-title">
@@ -137,17 +178,18 @@ export default function App() {
                         disabled={running}
                         title="Run (Ctrl+Enter)"
                       >
-                        {running ? (
-                          <><span className="spinner" /> Running…</>
-                        ) : (
-                          <>▶ Run</>
-                        )}
+                        {running ? <><span className="spinner" /> Running…</> : <>▶ Run</>}
                       </button>
                     </div>
                   </div>
                   <CodeEditor value={code} onChange={handleCodeChange} />
                 </div>
-                <div className="terminal-pane">
+
+                {/* ── Drag Handle ── */}
+                <div className="resize-handle" onMouseDown={onResizeStart} title="Drag to resize terminal" />
+
+                {/* ── Terminal ── */}
+                <div className="terminal-pane" style={{ height: terminalH }}>
                   <Terminal
                     result={result}
                     running={running}
@@ -167,6 +209,7 @@ export default function App() {
           )}
         </main>
       </div>
+
       {showAddModal && (
         <AddProblemModal
           onAdd={addProblem}

@@ -1,9 +1,16 @@
 import './TopBar.css'
 
-export default function TopBar() {
+export default function TopBar({ sidebarOpen, onToggleSidebar }) {
   return (
     <header className="topbar">
       <div className="topbar-left">
+        <button
+          className="sidebar-toggle"
+          onClick={onToggleSidebar}
+          title={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+        >
+          {sidebarOpen ? '☰' : '☰'}
+        </button>
         <div className="topbar-logo">
           <span className="logo-icon">☕</span>
           <div>

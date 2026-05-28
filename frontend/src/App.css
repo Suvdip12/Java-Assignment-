@@ -36,14 +36,45 @@
   min-height: 0;
 }
 
+/* Drag handle between editor and terminal */
+.resize-handle {
+  height: 5px;
+  background: var(--border);
+  cursor: row-resize;
+  flex-shrink: 0;
+  position: relative;
+  transition: background 0.15s;
+  z-index: 10;
+}
+
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 1px;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--text-muted);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.resize-handle:hover {
+  background: var(--accent);
+}
+
+.resize-handle:hover::after {
+  opacity: 1;
+}
+
 .terminal-pane {
-  height: 300px;
-  min-height: 200px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-top: 1px solid var(--border);
   flex-shrink: 0;
+  border-top: none;
 }
 
 /* ── Pane header ── */

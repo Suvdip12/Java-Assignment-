@@ -30,8 +30,7 @@ public class CompilerService {
             String code = request.getCode();
             String className = extractMainClassName(code);
 
-            Path sourceFile = tempDir.resolve(className + ".java");
-            Files.writeString(sourceFile, code);
+            Files.writeString(tempDir.resolve(className + ".java"), code);
 
             // ── Compile ──────────────────────────────────────────────────────
             long compileStart = System.currentTimeMillis();
@@ -40,7 +39,7 @@ public class CompilerService {
             compileBuilder.redirectErrorStream(true);
 
             Process compileProcess = compileBuilder.start();
-            String compileOutput = readStreamFully(compileProcess.getInputStream(), maxOutputBytes);
+            String compileOutput = drain(compileProcess.getInputStream());
             boolean compiled = compileProcess.waitFor(timeoutSeconds, TimeUnit.SECONDS);
             response.setCompileTimeMs(System.currentTimeMillis() - compileStart);
 
@@ -50,42 +49,36 @@ public class CompilerService {
                 return response;
             }
 
-            // ── Execute ───────────────────────────────────────────────────────
-            long execStart = System.currentTimeMillis();
+            // ── Write stdin to a temp file (most reliable approach) ──────────
             ProcessBuilder runBuilder = new ProcessBuilder("java", "-cp", tempDir.toString(), className);
             runBuilder.directory(tempDir.toFile());
 
+            String stdin = request.getStdin();
+            if (stdin != null && !stdin.isBlank()) {
+                if (!stdin.endsWith("\n")) stdin += "\n";
+                Path stdinFile = tempDir.resolve("stdin.txt");
+                Files.writeString(stdinFile, stdin);
+                runBuilder.redirectInput(stdinFile.toFile());   // process reads stdin from file
+            }
+
+            // ── Execute ───────────────────────────────────────────────────────
+            long execStart = System.currentTimeMillis();
             Process runProcess = runBuilder.start();
 
-            // Read stdout and stderr in separate threads to prevent buffer deadlock
+            // Close stdin pipe if no input file was set
+            if (stdin == null || stdin.isBlank()) {
+                runProcess.getOutputStream().close();
+            }
+
+            // Read stdout + stderr in parallel threads to prevent buffer deadlock
             StringBuilder stdoutBuf = new StringBuilder();
             StringBuilder stderrBuf = new StringBuilder();
-
-            Thread stdoutThread = new Thread(() -> {
-                try { stdoutBuf.append(readStreamFully(runProcess.getInputStream(), maxOutputBytes)); }
-                catch (IOException ignored) {}
-            });
-            Thread stderrThread = new Thread(() -> {
-                try { stderrBuf.append(readStreamFully(runProcess.getErrorStream(), maxOutputBytes)); }
-                catch (IOException ignored) {}
-            });
-            stdoutThread.start();
-            stderrThread.start();
-
-            // Write stdin after readers are started
-            try (OutputStream os = runProcess.getOutputStream()) {
-                String stdin = request.getStdin();
-                if (stdin != null && !stdin.isBlank()) {
-                    // Ensure each line ends with newline so Scanner.nextLine() / nextDouble() works
-                    if (!stdin.endsWith("\n")) stdin = stdin + "\n";
-                    os.write(stdin.getBytes());
-                    os.flush();
-                }
-            } catch (IOException ignored) {}
+            Thread t1 = new Thread(() -> { try { stdoutBuf.append(drain(runProcess.getInputStream()));  } catch (IOException ignored) {} });
+            Thread t2 = new Thread(() -> { try { stderrBuf.append(drain(runProcess.getErrorStream())); } catch (IOException ignored) {} });
+            t1.start(); t2.start();
 
             boolean finished = runProcess.waitFor(timeoutSeconds, TimeUnit.SECONDS);
-            stdoutThread.join(3000);
-            stderrThread.join(3000);
+            t1.join(3000); t2.join(3000);
             response.setExecutionTimeMs(System.currentTimeMillis() - execStart);
 
             if (!finished) {
@@ -119,40 +112,30 @@ public class CompilerService {
     }
 
     private String extractMainClassName(String code) {
-        Pattern publicClass = Pattern.compile("public\\s+class\\s+(\\w+)");
-        Matcher m = publicClass.matcher(code);
+        Matcher m = Pattern.compile("public\\s+class\\s+(\\w+)").matcher(code);
         if (m.find()) return m.group(1);
 
-        Pattern mainMethod = Pattern.compile(
-            "class\\s+(\\w+)[^{]*\\{(?:[^{}]|\\{[^{}]*\\})*public\\s+static\\s+void\\s+main",
-            Pattern.DOTALL);
-        m = mainMethod.matcher(code);
+        m = Pattern.compile("class\\s+(\\w+)[^{]*\\{(?:[^{}]|\\{[^{}]*\\})*public\\s+static\\s+void\\s+main",
+            Pattern.DOTALL).matcher(code);
         if (m.find()) return m.group(1);
 
-        Pattern anyClass = Pattern.compile("class\\s+(\\w+)");
-        m = anyClass.matcher(code);
+        m = Pattern.compile("class\\s+(\\w+)").matcher(code);
         String last = "Main";
         while (m.find()) last = m.group(1);
         return last;
     }
 
-    private String readStreamFully(InputStream is, int maxBytes) throws IOException {
+    private String drain(InputStream is) throws IOException {
         ByteArrayOutputStream buf = new ByteArrayOutputStream();
         byte[] chunk = new byte[4096];
         int read;
-        int total = 0;
-        while (total < maxBytes && (read = is.read(chunk)) != -1) {
-            int take = Math.min(read, maxBytes - total);
-            buf.write(chunk, 0, take);
-            total += take;
-        }
+        while ((read = is.read(chunk)) != -1) buf.write(chunk, 0, read);
         return buf.toString();
     }
 
     private void deleteDirectory(Path dir) {
         try {
-            Files.walk(dir)
-                .sorted(Comparator.reverseOrder())
+            Files.walk(dir).sorted(Comparator.reverseOrder())
                 .forEach(p -> { try { Files.deleteIfExists(p); } catch (IOException ignored) {} });
         } catch (IOException ignored) {}
     }
