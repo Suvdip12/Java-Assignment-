@@ -19,6 +19,8 @@ export default function App() {
   const [runTrigger, setRunTrigger]     = useState(0)
   const [showAddModal, setShowAddModal] = useState(false)
   const [dirty, setDirty]               = useState(false)
+  const [saving, setSaving]             = useState(false)
+  const [saveFlash, setSaveFlash]       = useState(false)
   const [sidebarOpen, setSidebarOpen]   = useState(true)
   const [terminalH, setTerminalH]       = useState(DEFAULT_H)
   const [editorFontSize, setEditorFontSize] = useState(13.5)
@@ -67,11 +69,40 @@ export default function App() {
     setRunTrigger(t => t + 1)
   }, [running])
 
+  const saveCode = useCallback(async () => {
+    if (!selected || !dirty || saving) return
+    setSaving(true)
+    try {
+      await fetch(`/api/problems/${selected.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      })
+      setSelected(prev => ({ ...prev, code }))
+      setDirty(false)
+      setSaveFlash(true)
+      setTimeout(() => setSaveFlash(false), 1500)
+    } finally {
+      setSaving(false)
+    }
+  }, [selected, dirty, saving, code])
+
+  const downloadCode = () => {
+    if (!selected) return
+    const filename = (selected.questionNumber || 'Main') + '.java'
+    const blob = new Blob([code], { type: 'text/plain' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href = url; a.download = filename; a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const resetCode = async () => {
     if (!selected) return
     const res  = await fetch(`/api/problems/${selected.id}/reset`, { method: 'POST' })
     const data = await res.json()
     setCode(data.code)
+    setSelected(prev => ({ ...prev, code: data.code }))
     setDirty(false)
   }
 
@@ -100,10 +131,11 @@ export default function App() {
   useEffect(() => {
     const h = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); runCode() }
+      if ((e.ctrlKey || e.metaKey) && e.key === 's')     { e.preventDefault(); saveCode() }
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
-  }, [runCode])
+  }, [runCode, saveCode])
 
   return (
     <div className="app">
@@ -138,6 +170,21 @@ export default function App() {
                       &nbsp;&nbsp;{selected.questionNumber}.java
                     </span>
                     <div className="pane-actions">
+                      <button
+                        className="btn-ghost btn-download"
+                        onClick={downloadCode}
+                        title="Download as .java file"
+                      >⬇ Download</button>
+                      {dirty && (
+                        <button
+                          className={`btn-save ${saveFlash ? 'save-flash' : ''}`}
+                          onClick={saveCode}
+                          disabled={saving}
+                          title="Save changes (Ctrl+S)"
+                        >
+                          {saving ? '…' : saveFlash ? '✓ Saved' : '💾 Save'}
+                        </button>
+                      )}
                       {dirty && (
                         <button className="btn-ghost" onClick={resetCode} title="Reset to original">
                           ↩ Reset
