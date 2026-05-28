@@ -88,19 +88,22 @@ export default function Terminal({ result, running, stdin, onStdinChange, inputT
         )}
       </div>
 
-      <div className="stdin-section">
+      <div className={`stdin-section ${inputType === 'STDIN' && !stdin.trim() ? 'stdin-warn' : ''}`}>
         <label className="stdin-label">
           <span className="stdin-icon">⌨</span>
-          {inputType === 'STDIN' ? 'Program Input (stdin)' : 'Stdin (optional)'}
+          {inputType === 'STDIN' ? 'Program Input (stdin) — required' : 'Stdin (optional)'}
+          {inputType === 'STDIN' && !stdin.trim() && (
+            <span className="stdin-warning">⚠ empty — program will time out</span>
+          )}
         </label>
         <textarea
           className="stdin-textarea"
           value={stdin}
           onChange={e => onStdinChange(e.target.value)}
           placeholder={inputType === 'STDIN'
-            ? 'Enter input values (one per line)…'
+            ? 'Enter input values, one per line…'
             : 'No input required for this program'}
-          rows={5}
+          rows={3}
           spellCheck={false}
         />
       </div>

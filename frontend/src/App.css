@@ -38,47 +38,37 @@
 
 /* Drag handle between editor and terminal */
 .resize-handle {
-  height: 5px;
+  height: 10px;
   background: var(--border);
   cursor: row-resize;
   flex-shrink: 0;
   position: relative;
   transition: background 0.15s;
-  z-index: 10;
+  touch-action: none;   /* prevent mobile scroll interfering with drag */
+  user-select: none;
 }
 
 .resize-handle::after {
   content: '';
   position: absolute;
   left: 50%;
-  top: 1px;
-  transform: translateX(-50%);
-  width: 40px;
-  height: 3px;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 48px;
+  height: 4px;
   border-radius: 2px;
   background: var(--text-muted);
-  opacity: 0;
-  transition: opacity 0.15s;
+  opacity: 0.5;
+  transition: opacity 0.15s, background 0.15s;
 }
 
-.resize-handle:hover,
-.resize-handle.dragging {
+.resize-handle:hover {
+  background: rgba(88, 166, 255, 0.2);
+}
+
+.resize-handle:hover::after {
   background: var(--accent);
-}
-
-.resize-handle:hover::after,
-.resize-handle.dragging::after {
   opacity: 1;
-}
-
-/* Full-screen overlay that captures mouse events while dragging the resize handle,
-   preventing Monaco Editor from stealing mousemove/mouseup during drag */
-.drag-overlay {
-  position: fixed;
-  inset: 0;
-  cursor: row-resize;
-  z-index: 9999;
-  user-select: none;
 }
 
 .terminal-pane {

@@ -65,14 +65,19 @@ public class CompilerService {
             // ── 3. EXECUTE ────────────────────────────────────────────────────
             long execStart = System.currentTimeMillis();
 
-            ProcessBuilder java = new ProcessBuilder("java", "-cp", tempDir.toString(), className);
+            ProcessBuilder java = new ProcessBuilder(
+                    "java",
+                    "-cp", tempDir.toString(),
+                    "-Dfile.encoding=UTF-8",
+                    "-Dstdout.encoding=UTF-8",
+                    className);
             java.directory(tempDir.toFile());
-            // DO NOT redirect stdin from file – write via pipe in a thread (works everywhere)
 
             Process runProc = java.start();
 
-            // Three parallel threads: write stdin, read stdout, read stderr
-            // This prevents all buffer-deadlock scenarios.
+            // Three parallel threads prevent stdout/stderr buffer-deadlock.
+            // tIn writes stdin and closes the stream (EOF), then stdout/stderr
+            // are drained concurrently while we wait for the process.
             StringBuilder outBuf = new StringBuilder();
             StringBuilder errBuf = new StringBuilder();
 
@@ -90,18 +95,20 @@ public class CompilerService {
                         os.write(stdinData.getBytes(StandardCharsets.UTF_8));
                         os.flush();
                     }
-                    // closing stream sends EOF → Scanner stops waiting
+                    // closing stream sends EOF → Scanner/BufferedReader stops blocking
                 } catch (IOException ignored) {}
             });
 
             tOut.start();
             tErr.start();
-            tIn.start();   // start AFTER readers so no output is missed
+            tIn.start();
+
+            // Wait for stdin to be fully written before timing the execution
+            tIn.join(5000);
 
             boolean done = runProc.waitFor(timeoutSeconds, TimeUnit.SECONDS);
-            tOut.join(3000);
-            tErr.join(1000);
-            tIn.join(1000);
+            tOut.join(5000);
+            tErr.join(2000);
             response.setExecutionTimeMs(System.currentTimeMillis() - execStart);
 
             if (!done) {

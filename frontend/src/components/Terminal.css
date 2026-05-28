@@ -204,6 +204,10 @@
   background: var(--bg-panel);
 }
 
+.stdin-section.stdin-warn {
+  border-top-color: var(--yellow);
+}
+
 .stdin-label {
   display: flex;
   align-items: center;
@@ -218,6 +222,15 @@
 
 .stdin-icon {
   color: var(--yellow);
+}
+
+.stdin-warning {
+  margin-left: auto;
+  color: var(--yellow);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: 11px;
 }
 
 .stdin-textarea {

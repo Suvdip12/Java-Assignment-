@@ -7,9 +7,9 @@ import Terminal from './components/Terminal'
 import AddProblemModal from './components/AddProblemModal'
 import './App.css'
 
-const MIN_H = 100
-const MAX_H = 620
-const DEFAULT_H = 280
+const MIN_H = 150
+const MAX_H = 650
+const DEFAULT_H = 300
 
 export default function App() {
   const [problems, setProblems]         = useState([])
@@ -22,36 +22,27 @@ export default function App() {
   const [dirty, setDirty]               = useState(false)
   const [sidebarOpen, setSidebarOpen]   = useState(true)
   const [terminalH, setTerminalH]       = useState(DEFAULT_H)
-  const [isDragging, setIsDragging]     = useState(false)  // overlay while dragging
 
   const dragRef = useRef({ active: false, startY: 0, startH: 0 })
 
-  // ── Drag-to-resize terminal ────────────────────────────────────────────────
-  const onResizeStart = (e) => {
+  // ── Drag-to-resize using Pointer Capture ──────────────────────────────────
+  // setPointerCapture routes ALL pointer events to this element, bypassing
+  // Monaco Editor's iframe completely — no overlay needed.
+  const onHandlePointerDown = (e) => {
     e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
     dragRef.current = { active: true, startY: e.clientY, startH: terminalH }
-    setIsDragging(true)
   }
 
-  useEffect(() => {
-    const onMove = (e) => {
-      if (!dragRef.current.active) return
-      const delta = dragRef.current.startY - e.clientY   // up = bigger
-      const newH  = Math.min(MAX_H, Math.max(MIN_H, dragRef.current.startH + delta))
-      setTerminalH(newH)
-    }
-    const onUp = () => {
-      if (!dragRef.current.active) return
-      dragRef.current.active = false
-      setIsDragging(false)
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-    return () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-  }, [])
+  const onHandlePointerMove = (e) => {
+    if (!dragRef.current.active) return
+    const delta = dragRef.current.startY - e.clientY   // drag up → terminal taller
+    setTerminalH(Math.min(MAX_H, Math.max(MIN_H, dragRef.current.startH + delta)))
+  }
+
+  const onHandlePointerUp = () => {
+    dragRef.current.active = false
+  }
 
   // ── Load problems ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -135,9 +126,6 @@ export default function App() {
 
   return (
     <div className="app">
-      {/* Full-screen drag overlay — blocks Monaco from stealing mouse events */}
-      {isDragging && <div className="drag-overlay" />}
-
       <TopBar sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen(v => !v)} />
 
       <div className="workspace">
@@ -189,10 +177,13 @@ export default function App() {
                   <CodeEditor value={code} onChange={handleCodeChange} />
                 </div>
 
-                {/* ── Drag Handle ── */}
+                {/* ── Drag Handle — pointer capture keeps events here even over Monaco ── */}
                 <div
-                  className={`resize-handle ${isDragging ? 'dragging' : ''}`}
-                  onMouseDown={onResizeStart}
+                  className="resize-handle"
+                  onPointerDown={onHandlePointerDown}
+                  onPointerMove={onHandlePointerMove}
+                  onPointerUp={onHandlePointerUp}
+                  onPointerCancel={onHandlePointerUp}
                   title="Drag up / down to resize terminal"
                 />
 
