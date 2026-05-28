@@ -15,12 +15,16 @@ export default function App() {
   const [problems, setProblems]         = useState([])
   const [selected, setSelected]         = useState(null)
   const [code, setCode]                 = useState('')
-  const [running, setRunning]           = useState(false)   // reported by Terminal
-  const [runTrigger, setRunTrigger]     = useState(0)       // increment to trigger a run
+  const [running, setRunning]           = useState(false)
+  const [runTrigger, setRunTrigger]     = useState(0)
   const [showAddModal, setShowAddModal] = useState(false)
   const [dirty, setDirty]               = useState(false)
   const [sidebarOpen, setSidebarOpen]   = useState(true)
   const [terminalH, setTerminalH]       = useState(DEFAULT_H)
+  const [editorFontSize, setEditorFontSize] = useState(13.5)
+
+  const editorZoomIn  = () => setEditorFontSize(s => Math.min(28, s + 1))
+  const editorZoomOut = () => setEditorFontSize(s => Math.max(10, s - 1))
 
   const dragRef = useRef({ active: false, startY: 0, startH: 0 })
 
@@ -139,6 +143,10 @@ export default function App() {
                           ↩ Reset
                         </button>
                       )}
+                      <div className="zoom-btns">
+                        <button className="btn-zoom" onClick={editorZoomOut} title="Decrease font size">A−</button>
+                        <button className="btn-zoom" onClick={editorZoomIn}  title="Increase font size">A+</button>
+                      </div>
                       <button
                         className={`btn-run ${running ? 'running' : ''}`}
                         onClick={runCode}
@@ -151,7 +159,7 @@ export default function App() {
                       </button>
                     </div>
                   </div>
-                  <CodeEditor value={code} onChange={handleCodeChange} />
+                  <CodeEditor value={code} onChange={handleCodeChange} fontSize={editorFontSize} />
                 </div>
 
                 {/* ── Drag Handle ── */}

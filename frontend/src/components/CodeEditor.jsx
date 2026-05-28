@@ -28,7 +28,7 @@ const THEME_DEF = {
   }
 }
 
-export default function CodeEditor({ value, onChange }) {
+export default function CodeEditor({ value, onChange, fontSize = 13.5 }) {
   const handleMount = (editor, monaco) => {
     monaco.editor.defineTheme('dracula-custom', THEME_DEF)
     monaco.editor.setTheme('dracula-custom')
@@ -44,7 +44,7 @@ export default function CodeEditor({ value, onChange }) {
         theme="dracula-custom"
         onMount={handleMount}
         options={{
-          fontSize: 13.5,
+          fontSize,
           fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
           fontLigatures: true,
           minimap: { enabled: false },

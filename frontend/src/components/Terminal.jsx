@@ -2,8 +2,12 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import './Terminal.css'
 
 export default function Terminal({ code, runTrigger, problemId, onRunningChange }) {
-  const [isRunning, setIsRunning] = useState(false)
-  const [stats, setStats]         = useState({ compileMs: null, execMs: null })
+  const [isRunning,  setIsRunning]  = useState(false)
+  const [stats,      setStats]      = useState({ compileMs: null, execMs: null })
+  const [fontSize,   setFontSize]   = useState(13)
+
+  const zoomIn  = () => setFontSize(s => Math.min(26, s + 1))
+  const zoomOut = () => setFontSize(s => Math.max(10, s - 1))
 
   // All fast-changing data lives in refs so stream callbacks never go stale.
   const contentRef = useRef('')
@@ -200,6 +204,10 @@ export default function Terminal({ code, runTrigger, problemId, onRunningChange 
         <div className="terminal-stats">
           {stats.compileMs != null && <span className="stat compile">⚙ {stats.compileMs}ms</span>}
           {stats.execMs    != null && <span className="stat exec">⚡ {stats.execMs}ms</span>}
+          <div className="term-zoom-btns">
+            <button className="btn-term-zoom" onClick={e => { e.stopPropagation(); zoomOut() }} title="Decrease font">A−</button>
+            <button className="btn-term-zoom" onClick={e => { e.stopPropagation(); zoomIn()  }} title="Increase font">A+</button>
+          </div>
           {displayContent && (
             <button
               className="btn-copy"
@@ -224,7 +232,7 @@ export default function Terminal({ code, runTrigger, problemId, onRunningChange 
           </div>
         )}
 
-        <pre className="terminal-text">
+        <pre className="terminal-text" style={{ fontSize }}>
           {displayContent}
           {isRunning && <span className="terminal-live-input">{displayInput}</span>}
           {isRunning && <span className="terminal-cursor blink-cursor">█</span>}
